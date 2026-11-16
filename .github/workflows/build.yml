@@ -1,0 +1,87 @@
+name: Build Glass Icons + IconPack APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: "4K icon size (px) for the optional PNG artifact"
+        default: "4096"
+      four_k:
+        description: "Also build the 4K PNG artifact (slow, ~1-2 hours)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: IconPack APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - run: pip install pillow numpy opencv-contrib-python-headless
+
+      - name: Upscale + glass (1024px source, APK icons are 512px)
+        run: python tools/glass.py --input input --output out --size 1024
+
+      - name: Build icon pack resources
+        run: python tools/make_iconpack.py
+
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+
+      - name: Build APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/*.apk dist/iOS27-Glass-IconPack.apk
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iOS27-GlassIconPack-apk
+          path: dist/iOS27-Glass-IconPack.apk
+
+      - name: Publish APK to Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: iOS 27 Glass IconPack (build ${{ github.run_number }})
+          body: |
+            Debug APK built from commit ${{ github.sha }}.
+            Install, then apply the pack in Nova / Lawnchair / Smart Launcher.
+          files: dist/iOS27-Glass-IconPack.apk
+
+  icons4k:
+    name: 4K glass PNGs
+    if: github.event_name == 'workflow_dispatch' && inputs.four_k
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+
+      - run: pip install pillow numpy opencv-contrib-python-headless
+
+      - name: Upscale + glass (one by one)
+        run: python tools/glass.py --input input --output out --size ${{ inputs.size || '4096' }} --sr
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glass-icons-4k
+          path: out/

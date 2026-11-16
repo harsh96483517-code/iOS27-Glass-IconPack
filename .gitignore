@@ -1,0 +1,8 @@
+out/
+build/
+.gradle/
+FSRCNN_x4.pb
+app/src/main/res/drawable-nodpi/
+app/src/main/res/xml/
+app/src/main/assets/
+local.properties
